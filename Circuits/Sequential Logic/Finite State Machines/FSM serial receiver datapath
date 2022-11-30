@@ -1,0 +1,66 @@
+module top_module(
+    input clk,
+    input in,
+    input reset,    // Synchronous reset
+    output [7:0] out_byte,
+    output done
+); //
+
+ parameter IDLE=3'd0,start=3'd1,receive=3'd2,stop=3'd3,wait_stop=3'd4;
+    reg [2:0] state, next_state;
+    reg [2:0] cnt;
+    reg [7:0] byte_buf;
+    // Use FSM from Fsm_serial
+    // state  transition logic
+    always @(*) begin
+        case (state)
+            IDLE:next_state=(in==0)?receive:start;
+            start:next_state=(in==0)?receive:start;
+            receive:begin
+                if (cnt==3'd7) begin
+                    next_state=stop;
+                end else begin
+                    next_state=receive;
+                end
+            end
+            stop:next_state=(in==1)?start:wait_stop;
+            wait_stop:next_state=(in==1)?start:wait_stop;
+            default:next_state=IDLE;
+        endcase
+    end
+    // state registers 
+    always @ (posedge clk) begin
+        if (reset) state<=IDLE;
+        else state<=next_state;
+    end
+    // counter for receive state, and output logic for done
+            always @(posedge clk) begin
+                if (reset) begin
+                    done<=0;
+                    cnt<=0;
+                end else if (state==receive) begin
+                    cnt<=cnt+1;
+                    done<=0;
+                end else if ((state==stop) && (in==1)) begin
+                    done<=1;
+                    cnt<=0;
+                end else begin 
+                    done<=0;
+                    cnt<=0;
+                end
+            end 
+
+    // New: Datapath to latch input bits.
+            always @(posedge clk) begin
+                if (reset) byte_buf<=0;
+                else if (state==receive) begin
+                    byte_buf[cnt]<=in;
+                end
+            end
+            
+   // out_byte logic
+    assign out_byte=(done==1)?byte_buf:8'b0;
+  
+
+endmodule
+
